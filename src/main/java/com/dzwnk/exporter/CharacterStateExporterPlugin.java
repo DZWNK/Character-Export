@@ -100,10 +100,8 @@ public class CharacterStateExporterPlugin extends Plugin
     private static final String PLUGIN_VERSION = "0.6.0";
     private static final Path RUNELITE_DIR = RuneLite.RUNELITE_DIR.toPath().toAbsolutePath().normalize();
     private static final Path BASE_OUTPUT_DIR = RUNELITE_DIR.resolve("character-exporter").normalize();
-    private static final Gson PRETTY_GSON = new GsonBuilder()
-        .disableHtmlEscaping()
-        .setPrettyPrinting()
-        .create();
+    // Initialised in startUp() from the injected Gson to satisfy plugin-hub rules.
+    private Gson prettyGson;
 
     private static final String CHARACTER_FILE = "character.json";
     private static final String QUESTS_FILE = "quests.json";
@@ -376,6 +374,11 @@ public class CharacterStateExporterPlugin extends Plugin
     @Override
     protected void startUp()
     {
+        prettyGson = gson.newBuilder()
+            .disableHtmlEscaping()
+            .setPrettyPrinting()
+            .create();
+
         writer = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder()
                 .setDaemon(true)
@@ -2213,7 +2216,7 @@ public class CharacterStateExporterPlugin extends Plugin
     {
         try
         {
-            return PRETTY_GSON.toJson(payload);
+            return prettyGson.toJson(payload);
         }
         catch (RuntimeException ex)
         {
