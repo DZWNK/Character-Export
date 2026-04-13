@@ -23,7 +23,7 @@ Write-Host "    Press Ctrl+C to stop."
 Push-Location $buildDir
 try
 {
-    gradle run 2>&1 | Tee-Object -FilePath $logFile
+    .\gradlew.bat run 2>&1 | Tee-Object -FilePath $logFile
 }
 finally
 {
