@@ -34,7 +34,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -58,6 +59,7 @@ import net.runelite.client.ui.PluginPanel;
 class CharacterStateExporterPanel extends PluginPanel
 {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("h:mm:ss a");
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MMM d, h:mm:ss a");
     private static final int BUTTON_WIDTH = 170;
     private static final String[] DATASET_FILES = {
         "bank.json", "character.json", "diaries.json", "quests.json",
@@ -359,10 +361,11 @@ class CharacterStateExporterPanel extends PluginPanel
 
     void markExported(String datasetKey)
     {
-        String time = LocalTime.now().format(TIME_FMT);
+        String time = formatStatusTime(Instant.now());
+        String tooltip = formatStatusTooltip(Instant.now(), "Updated");
         SwingUtilities.invokeLater(() ->
         {
-            setRowState(datasetKey, time, "Updated", Color.GREEN, null);
+            setRowState(datasetKey, time, "Updated", Color.GREEN, tooltip);
             rebuildOpenFileDropdown();
         });
         recordManualOutcome(datasetKey, SyncOutcome.UPDATED);
@@ -370,10 +373,11 @@ class CharacterStateExporterPanel extends PluginPanel
 
     void markChecked(String datasetKey)
     {
-        String time = LocalTime.now().format(TIME_FMT);
+        String time = formatStatusTime(Instant.now());
+        String tooltip = formatStatusTooltip(Instant.now(), "Checked");
         SwingUtilities.invokeLater(() ->
         {
-            setRowState(datasetKey, time, "Up to date", Color.GREEN, "Checked just now; export data was unchanged.");
+            setRowState(datasetKey, time, "Up to date", Color.GREEN, tooltip);
         });
         recordManualOutcome(datasetKey, SyncOutcome.UP_TO_DATE);
     }
@@ -447,9 +451,10 @@ class CharacterStateExporterPanel extends PluginPanel
                 try
                 {
                     Instant modified = Files.getLastModifiedTime(file).toInstant();
-                    String exportedAt = LocalTime.ofInstant(modified, java.time.ZoneId.systemDefault()).format(TIME_FMT);
+                    String exportedAt = formatStatusTime(modified);
+                    String tooltip = formatStatusTooltip(modified, "Saved");
 
-                    setRowState(DATASET_KEYS[i], exportedAt, "Saved", Color.GREEN, "Found an existing export file in this account folder.");
+                    setRowState(DATASET_KEYS[i], exportedAt, "Saved", Color.GREEN, tooltip);
                 }
                 catch (IOException ignored)
                 {
@@ -508,6 +513,18 @@ class CharacterStateExporterPanel extends PluginPanel
                 manualSyncInProgress = false;
             }
         }
+    }
+
+    static String formatStatusTime(Instant instant)
+    {
+        ZonedDateTime localTime = instant.atZone(ZoneId.systemDefault());
+        return localTime.toLocalTime().format(TIME_FMT);
+    }
+
+    static String formatStatusTooltip(Instant instant, String prefix)
+    {
+        ZonedDateTime localTime = instant.atZone(ZoneId.systemDefault());
+        return prefix + " " + localTime.format(DATE_TIME_FMT);
     }
 
     private void rebuildOpenFileDropdown()

@@ -138,6 +138,34 @@ public class CharacterStateExporterPlugin extends Plugin
         {"Wilderness", 4466, 4467, 4468, 4469},
     };
     private static final String[] DIARY_TIERS = {"easy", "medium", "hard", "elite"};
+    private enum DiaryContinuationKind
+    {
+        NONE,
+        TEXT,
+        REQUIREMENT
+    }
+
+    static final class DiaryWidgetLine
+    {
+        private final String text;
+        private final boolean complete;
+
+        private DiaryWidgetLine(String text, boolean complete)
+        {
+            this.text = text;
+            this.complete = complete;
+        }
+
+        String getText()
+        {
+            return text;
+        }
+
+        boolean isComplete()
+        {
+            return complete;
+        }
+    }
 
     // Task count varbits per diary area/tier — order matches DIARY_DEFINITIONS
     private static final int[][] DIARY_COUNT_VARBITS = {
@@ -1274,65 +1302,63 @@ public class CharacterStateExporterPlugin extends Plugin
                 continue;
             }
 
-            String clean = stripWidgetTags(raw).trim();
-            if (clean.isEmpty())
+            for (DiaryWidgetLine line : splitDiaryWidgetLines(raw))
             {
-                continue;
-            }
-
-            // Skip the area title line
-            String norm = clean.toUpperCase().replace(' ', '_');
-            boolean isAreaTitle = false;
-            for (String title : DIARY_WIDGET_TITLES)
-            {
-                if (title.equals(norm))
+                String clean = line.getText();
+                if (clean.isEmpty())
                 {
-                    isAreaTitle = true;
-                    foundAreaTitle = true;
-                    break;
+                    continue;
                 }
-            }
-            if (isAreaTitle)
-            {
-                continue;
-            }
 
-            if (!foundAreaTitle)
-            {
-                continue;
-            }
+                // Skip the area title line
+                String norm = clean.toUpperCase().replace(' ', '_');
+                boolean isAreaTitle = false;
+                for (String title : DIARY_WIDGET_TITLES)
+                {
+                    if (title.equals(norm))
+                    {
+                        isAreaTitle = true;
+                        foundAreaTitle = true;
+                        break;
+                    }
+                }
+                if (isAreaTitle)
+                {
+                    continue;
+                }
 
-            // Check for tier header
-            String upperClean = clean.toUpperCase();
-            if (upperClean.startsWith("EASY"))
-            {
-                currentTier = "easy";
-                continue;
-            }
-            else if (upperClean.startsWith("MEDIUM"))
-            {
-                currentTier = "medium";
-                continue;
-            }
-            else if (upperClean.startsWith("HARD"))
-            {
-                currentTier = "hard";
-                continue;
-            }
-            else if (upperClean.startsWith("ELITE"))
-            {
-                currentTier = "elite";
-                continue;
-            }
+                if (!foundAreaTitle)
+                {
+                    continue;
+                }
 
-            // It is a task line
-            if (currentTier != null)
-            {
-                boolean complete = raw.contains("<str>");
-                Map<String, Object> task = new LinkedHashMap<>();
-                task.put("name", clean);
-                task.put("complete", complete);
-                tierTasks.get(currentTier).add(task);
+                // Check for tier header
+                String upperClean = clean.toUpperCase();
+                if (upperClean.startsWith("EASY"))
+                {
+                    currentTier = "easy";
+                    continue;
+                }
+                else if (upperClean.startsWith("MEDIUM"))
+                {
+                    currentTier = "medium";
+                    continue;
+                }
+                else if (upperClean.startsWith("HARD"))
+                {
+                    currentTier = "hard";
+                    continue;
+                }
+                else if (upperClean.startsWith("ELITE"))
+                {
+                    currentTier = "elite";
+                    continue;
+                }
+
+                if (currentTier != null)
+                {
+                    appendDiaryTaskLine(tierTasks.get(currentTier), clean, line.isComplete());
+                }
             }
         }
 
@@ -1352,6 +1378,122 @@ public class CharacterStateExporterPlugin extends Plugin
             debug("diaries", "Scraped diary journal for {} — {} tiers with tasks", areaName, filtered.size());
             exportDiarySnapshot("diary_journal_scraped", DIARY_EXPORT_INTERVAL_MS);
         }
+    }
+
+    static void appendDiaryTaskLine(List<Map<String, Object>> tasks, String clean, boolean complete)
+    {
+        if (shouldSkipDiaryTaskLine(clean))
+        {
+            return;
+        }
+
+        DiaryContinuationKind continuationKind = classifyDiaryContinuation(tasks, clean);
+        if (continuationKind != DiaryContinuationKind.NONE)
+        {
+            Map<String, Object> previousTask = tasks.get(tasks.size() - 1);
+            String previousName = String.valueOf(previousTask.get("name"));
+            previousTask.put("name", joinDiaryTaskText(previousName, clean));
+            if (continuationKind == DiaryContinuationKind.TEXT && complete)
+            {
+                previousTask.put("complete", true);
+            }
+            return;
+        }
+
+        Map<String, Object> task = new LinkedHashMap<>();
+        task.put("name", clean);
+        task.put("complete", complete);
+        tasks.add(task);
+    }
+
+    private static boolean shouldSkipDiaryTaskLine(String clean)
+    {
+        String normalized = clean.trim().toLowerCase();
+        return normalized.startsWith("if i ever lose my ");
+    }
+
+    private static DiaryContinuationKind classifyDiaryContinuation(List<Map<String, Object>> tasks, String clean)
+    {
+        if (tasks.isEmpty() || clean.isEmpty())
+        {
+            return DiaryContinuationKind.NONE;
+        }
+
+        if (clean.startsWith("("))
+        {
+            return DiaryContinuationKind.REQUIREMENT;
+        }
+
+        char first = clean.charAt(0);
+        if (Character.isLowerCase(first) || isInlinePunctuation(first))
+        {
+            return DiaryContinuationKind.TEXT;
+        }
+
+        String previousName = String.valueOf(tasks.get(tasks.size() - 1).get("name"));
+        if (!endsDiarySentence(previousName))
+        {
+            return DiaryContinuationKind.TEXT;
+        }
+
+        return DiaryContinuationKind.NONE;
+    }
+
+    private static String joinDiaryTaskText(String previous, String continuation)
+    {
+        if (previous.isEmpty())
+        {
+            return continuation;
+        }
+
+        if (continuation.isEmpty())
+        {
+            return previous;
+        }
+
+        if (isInlinePunctuation(continuation.charAt(0)))
+        {
+            return previous + continuation;
+        }
+
+        return previous + " " + continuation;
+    }
+
+    private static boolean endsDiarySentence(String text)
+    {
+        if (text == null || text.isEmpty())
+        {
+            return false;
+        }
+
+        char last = text.charAt(text.length() - 1);
+        return last == '.' || last == '!' || last == '?' || last == ')';
+    }
+
+    private static boolean isInlinePunctuation(char c)
+    {
+        return c == '.' || c == ',' || c == ';' || c == ':' || c == ')' || c == ']' || c == '}';
+    }
+
+    static List<DiaryWidgetLine> splitDiaryWidgetLines(String raw)
+    {
+        if (raw == null || raw.isEmpty())
+        {
+            return List.of();
+        }
+
+        String normalized = raw.replace('\r', '\n');
+
+        List<DiaryWidgetLine> lines = new ArrayList<>();
+        for (String part : normalized.split("(?i)<br\\s*/?>"))
+        {
+            String clean = stripWidgetTags(part).trim();
+            if (!clean.isEmpty())
+            {
+                lines.add(new DiaryWidgetLine(clean, part.toLowerCase().contains("<str>")));
+            }
+        }
+        return lines;
     }
 
     private void scrapeCollectionLogPage()
