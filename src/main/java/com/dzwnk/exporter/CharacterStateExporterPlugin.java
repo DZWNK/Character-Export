@@ -247,6 +247,7 @@ public class CharacterStateExporterPlugin extends Plugin
     private static final int[] KARAMJA_HARD_TASK_VARBITS = {3600, 3601, 3602, 3603, 3604, 3605, 3606, 3607, 3608, 3609};
 
     // Combat achievement struct param IDs
+    private static final int CA_PARAM_ID = 1306;
     private static final int CA_PARAM_NAME = 1308;
     private static final int CA_PARAM_TIER = 1310;
 
@@ -1124,17 +1125,16 @@ public class CharacterStateExporterPlugin extends Plugin
             }
             String tierName = CA_TIER_NAMES[task.tier - 1];
 
-            int varpIndex = task.sortId / 32;
-            int bitIndex = task.sortId % 32;
+            int varpIndex = task.id / 32;
             boolean complete = false;
             if (varpIndex < COMBAT_TASK_VARPS.length)
             {
                 int varpValue = client.getVarpValue(COMBAT_TASK_VARPS[varpIndex]);
-                complete = (varpValue & (1 << bitIndex)) != 0;
+                complete = isCombatTaskComplete(task.id, varpValue);
             }
 
             Map<String, Object> taskRow = new LinkedHashMap<>();
-            taskRow.put("id", task.sortId);
+            taskRow.put("id", task.id);
             taskRow.put("name", task.name);
             taskRow.put("complete", complete);
             tierTaskLists.get(tierName).add(taskRow);
@@ -1192,6 +1192,11 @@ public class CharacterStateExporterPlugin extends Plugin
         writeJson("combat_achievements", COMBAT_ACHIEVEMENTS_FILE, payload);
     }
 
+    static boolean isCombatTaskComplete(int taskId, int varpValue)
+    {
+        return (varpValue & (1 << (taskId % 32))) != 0;
+    }
+
     private void loadCombatTaskCache()
     {
         combatTaskCache.clear();
@@ -1209,12 +1214,13 @@ public class CharacterStateExporterPlugin extends Plugin
             {
                 name = "Task " + sortId;
             }
+            int id = struct.getIntValue(CA_PARAM_ID);
             int tier = struct.getIntValue(CA_PARAM_TIER);
             if (tier < 1 || tier > CA_TIER_NAMES.length)
             {
                 tier = 1;
             }
-            combatTaskCache.add(new CombatTask(sortId, name, tier));
+            combatTaskCache.add(new CombatTask(id, name, tier));
             loaded++;
         }
         debug("combat", "Loaded {} / {} combat tasks from game cache", loaded, COMBAT_STRUCT_IDS.length);
@@ -2498,13 +2504,13 @@ public class CharacterStateExporterPlugin extends Plugin
 
     private static final class CombatTask
     {
-        final int sortId;
+        final int id;
         final String name;
         final int tier; // 1 = Easy, 2 = Medium, 3 = Hard, 4 = Elite, 5 = Master, 6 = Grandmaster
 
-        CombatTask(int sortId, String name, int tier)
+        CombatTask(int id, String name, int tier)
         {
-            this.sortId = sortId;
+            this.id = id;
             this.name = name;
             this.tier = tier;
         }

@@ -12,6 +12,16 @@ import org.junit.Test;
 public class CharacterExportRegressionTest
 {
     @Test
+    public void combatAchievementCompletionUsesInternalTaskIdRatherThanSortPosition()
+    {
+        // Barrows Novice is second in the tier-sorted struct list, but its internal task ID is 24.
+        int completionVarp = 1 << 24;
+
+        Assert.assertTrue(CharacterStateExporterPlugin.isCombatTaskComplete(24, completionVarp));
+        Assert.assertFalse(CharacterStateExporterPlugin.isCombatTaskComplete(1, completionVarp));
+    }
+
+    @Test
     public void appendDiaryTaskLineMergesWrappedTaskText()
     {
         List<Map<String, Object>> tasks = new ArrayList<>();
