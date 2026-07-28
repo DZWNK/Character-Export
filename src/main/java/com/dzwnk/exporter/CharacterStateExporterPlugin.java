@@ -487,7 +487,7 @@ public class CharacterStateExporterPlugin extends Plugin
         }
         catch (InterruptedException ex)
         {
-            Thread.currentThread().interrupt();
+            log.warn("Character State Exporter writer shutdown was interrupted", ex);
             active.shutdownNow();
         }
     }
