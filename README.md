@@ -12,6 +12,7 @@ A RuneLite plugin that writes your character's full state to local JSON files, f
 | `combat_achievements.json` | Login, varbit change | All 637 named combat tasks with individual completion, grouped by tier |
 | `collection_log.json` | Collection log entry viewed | Incremental per-page accumulation, organised by tab |
 | `bank.json` | Bank opened | Full bank contents with item names |
+| `potion_storage.json` | Potion Storage opened or changed | Stored potions with total doses and selected withdraw dose |
 | `seed_vault.json` | Seed vault opened | Full seed vault contents |
 | `inventory.json` | Inventory changed | Carried items |
 | `equipment.json` | Equipment changed | Worn items |
@@ -20,6 +21,7 @@ A RuneLite plugin that writes your character's full state to local JSON files, f
 
 - **Diaries**: tier completion and tasks-done counts are always available. Named per-task lists require opening the diary journal in-game (all areas except Karamja, which has individual varbits). Widget-scraped data persists across sessions.
 - **Collection log**: requires physically opening each entry in the collection log. Data accumulates incrementally as you browse and persists across sessions.
+- **Potion Storage**: requires opening Potion Storage from the bank once per RuneLite session. Counts are exported as total doses because Potion Storage does not preserve individual vial sizes.
 - **Quests**: only 3-state progress (not started / in progress / finished). Per-step progress is not exposed by the RuneLite API.
 
 ## Output location
@@ -53,7 +55,7 @@ The plugin adds a sidebar panel showing:
 
 - Current account name and output folder
 - Per-dataset status (last export time or a contextual hint)
-- **Sync Available** — refreshes all datasets the client currently has in memory (skips bank/vault if not opened, skips collection log which requires in-game browsing)
+- **Sync Available** — refreshes all datasets the client currently has in memory (skips bank, Potion Storage, and vault if not opened; skips collection log which requires in-game browsing)
 - **Open Folder** — opens the active account directory in your file browser
 - **Open File** dropdown — opens any existing export file directly
 

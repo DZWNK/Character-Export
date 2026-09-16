@@ -119,4 +119,26 @@ public class CharacterExportRegressionTest
         Assert.assertTrue(tooltip.contains("Saved"));
         Assert.assertTrue(tooltip.contains(String.valueOf(yesterday.getDayOfMonth())));
     }
+
+    @Test
+    public void potionStorageRowPreservesDoseCountsAndStableIdentity()
+    {
+        Map<String, Object> row = CharacterStateExporterPlugin.buildPotionStorageRow(
+            123,
+            2434,
+            "Prayer potion(4)",
+            401,
+            4,
+            2434,
+            false
+        );
+
+        Assert.assertEquals(123, row.get("potion_enum_id"));
+        Assert.assertEquals(2434, row.get("id"));
+        Assert.assertEquals("Prayer potion(4)", row.get("name"));
+        Assert.assertEquals(401, row.get("doses"));
+        Assert.assertEquals(4, row.get("withdraw_doses"));
+        Assert.assertEquals(2434, row.get("withdraw_item_id"));
+        Assert.assertEquals(Boolean.FALSE, row.get("unfinished"));
+    }
 }

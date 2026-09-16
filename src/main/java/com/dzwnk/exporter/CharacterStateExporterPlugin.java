@@ -59,6 +59,8 @@ import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.EnumComposition;
+import net.runelite.api.EnumID;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
@@ -66,9 +68,11 @@ import net.runelite.api.ItemContainer;
 import net.runelite.api.Player;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
+import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
 import net.runelite.api.StructComposition;
 import net.runelite.api.WorldType;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -76,8 +80,11 @@ import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
@@ -92,8 +99,8 @@ import net.runelite.client.ui.NavigationButton;
 @Slf4j
 @PluginDescriptor(
     name = "Character Export",
-    description = "Saves stats, quests, diaries, combat achievements, bank, inventory, equipment, and collection log as local JSON files in .runelite/character-exporter/.",
-    tags = {"export", "data", "bank", "quests", "stats", "seed", "inventory", "equipment", "diary", "combat", "collection", "log"}
+    description = "Saves stats, quests, diaries, combat achievements, bank, potion storage, inventory, equipment, and collection log as local JSON files in .runelite/character-exporter/.",
+    tags = {"export", "data", "bank", "potion", "quests", "stats", "seed", "inventory", "equipment", "diary", "combat", "collection", "log"}
 )
 public class CharacterStateExporterPlugin extends Plugin
 {
@@ -108,6 +115,7 @@ public class CharacterStateExporterPlugin extends Plugin
     private static final String DIARIES_FILE = "diaries.json";
     private static final String COMBAT_ACHIEVEMENTS_FILE = "combat_achievements.json";
     private static final String COLLECTION_LOG_FILE = "collection_log.json";
+    private static final String POTION_STORAGE_FILE = "potion_storage.json";
     private static final String STATUS_FILE = "status.json";
     private static final String RECENT_EVENTS_FILE = "recent_events.json";
     private static final String EXPORTER_LOG_FILE = "exporter.log";
@@ -388,6 +396,8 @@ public class CharacterStateExporterPlugin extends Plugin
 
     private volatile ExecutorService writer;
     private volatile boolean pendingInitialCharacterExport;
+    private volatile boolean pendingPotionStorageExport;
+    private volatile boolean potionStorageAvailable;
     private volatile boolean writesEnabled;
     private volatile Path accountOutputDir;
     private volatile String currentAccountName;
@@ -425,9 +435,9 @@ public class CharacterStateExporterPlugin extends Plugin
             .build();
         clientToolbar.addNavigation(navButton);
 
-        debug("startup", "export toggles character={} quests={} diaries={} combatAchievements={} bank={} seedVault={} inventory={} equipment={}",
+        debug("startup", "export toggles character={} quests={} diaries={} combatAchievements={} bank={} potionStorage={} seedVault={} inventory={} equipment={}",
             config.exportCharacter(), config.exportQuests(), config.exportDiaries(), config.exportCombatAchievements(),
-            config.exportBank(), config.exportSeedVault(), config.exportInventory(), config.exportEquipment());
+            config.exportBank(), config.exportPotionStorage(), config.exportSeedVault(), config.exportInventory(), config.exportEquipment());
 
         if (writesEnabled && config.debugLogging())
         {
@@ -519,12 +529,26 @@ public class CharacterStateExporterPlugin extends Plugin
             combatTaskCache.clear();
             diaryWidgetCache.clear();
             collectionLogCache.clear();
+            pendingPotionStorageExport = false;
+            potionStorageAvailable = false;
             panel.clearAccount();
             lastStablePayloadByFile.clear();
         }
 
         updateReadinessSnapshot();
         requestObservabilityWrite(true);
+    }
+
+    @Subscribe
+    public void onClientTick(ClientTick event)
+    {
+        if (!pendingPotionStorageExport)
+        {
+            return;
+        }
+
+        pendingPotionStorageExport = false;
+        exportPotionStorageSnapshot("potion_storage_changed");
     }
 
     @Subscribe
@@ -624,9 +648,28 @@ public class CharacterStateExporterPlugin extends Plugin
     }
 
     @Subscribe
+    public void onWidgetClosed(WidgetClosed event)
+    {
+        if (event.getGroupId() == InterfaceID.BANKMAIN && event.isUnload())
+        {
+            pendingPotionStorageExport = false;
+            potionStorageAvailable = false;
+            updateReadinessSnapshot();
+        }
+    }
+
+    @Subscribe
     public void onScriptPostFired(ScriptPostFired event)
     {
         int scriptId = event.getScriptId();
+        if (scriptId == ScriptID.POTIONSTORE_BUILD || scriptId == ScriptID.POTIONSTORE_DOSE_CHANGE)
+        {
+            debug("potion_storage", "Potion Storage script fired id={}", scriptId);
+            potionStorageAvailable = true;
+            pendingPotionStorageExport = true;
+            return;
+        }
+
         for (int id : COLLECTION_LOG_SCRIPT_IDS)
         {
             if (scriptId == id)
@@ -678,6 +721,11 @@ public class CharacterStateExporterPlugin extends Plugin
             case "collectionlog":
                 clientThread.invokeLater(() -> writeCollectionLogSnapshot("manual_command"));
                 return;
+            case "potions":
+            case "potionstore":
+            case "potion_storage":
+                exportPotionStorageSnapshot("manual_command");
+                return;
             case "all":
                 exportCharacterSnapshot("manual_command");
                 for (ContainerKind containerKind : ContainerKind.values())
@@ -689,6 +737,7 @@ public class CharacterStateExporterPlugin extends Plugin
                     exportQuestSnapshot("manual_command");
                     exportDiarySnapshot("manual_command");
                     exportCombatAchievementSnapshot("manual_command");
+                    exportPotionStorageSnapshot("manual_command");
                     writeCollectionLogSnapshot("manual_command");
                 });
                 return;
@@ -1904,6 +1953,131 @@ public class CharacterStateExporterPlugin extends Plugin
         writeJson(kind.getDatasetKey(), kind.getFileName(), payload);
     }
 
+    private void exportPotionStorageSnapshot(String reason)
+    {
+        boolean manualPanelRequest = isManualPanelReason(reason);
+        if (!config.exportPotionStorage())
+        {
+            debug("potion_storage", "Skipped Potion Storage export reason={} because the dataset is disabled", reason);
+            updateDatasetStatus("potion_storage", "skipped", "disabled", ImmutableMap.of("reason", reason));
+            if (manualPanelRequest)
+            {
+                panel.markUnavailable("potion_storage", "Disabled", "This dataset is disabled in plugin settings.");
+            }
+            requestObservabilityWrite(false);
+            return;
+        }
+
+        if (client.getGameState() != GameState.LOGGED_IN)
+        {
+            debug("potion_storage", "Skipped Potion Storage export reason={} because gameState={}",
+                reason, client.getGameState());
+            updateDatasetStatus("potion_storage", "skipped", "not_logged_in", ImmutableMap.of("reason", reason));
+            if (manualPanelRequest)
+            {
+                panel.markUnavailable("potion_storage", "Not ready", "This data is only available while logged in.");
+            }
+            requestObservabilityWrite(false);
+            return;
+        }
+
+        if (!potionStorageAvailable)
+        {
+            debug("potion_storage", "Skipped Potion Storage export reason={} because storage is unavailable", reason);
+            updateDatasetStatus("potion_storage", "waiting", "storage_unavailable", ImmutableMap.of("reason", reason));
+            if (manualPanelRequest)
+            {
+                panel.markUnavailable("potion_storage", "Open first", "Open Potion Storage from your bank first to refresh this file.");
+            }
+            requestObservabilityWrite(false);
+            return;
+        }
+
+        if (!acquireExportSlot(POTION_STORAGE_FILE, CONTAINER_EXPORT_INTERVAL_MS))
+        {
+            debug("potion_storage", "Throttled Potion Storage export reason={}", reason);
+            updateDatasetStatus("potion_storage", "throttled", "minimum_interval", ImmutableMap.of("reason", reason));
+            if (manualPanelRequest)
+            {
+                panel.markChecked("potion_storage");
+            }
+            requestObservabilityWrite(false);
+            return;
+        }
+
+        List<Map<String, Object>> potions = new ArrayList<>();
+        int totalDoses = 0;
+        EnumComposition finishedPotions = client.getEnum(EnumID.POTIONSTORE_POTIONS);
+        EnumComposition unfinishedPotions = client.getEnum(EnumID.POTIONSTORE_UNFINISHED_POTIONS);
+        EnumComposition[] potionGroups = {finishedPotions, unfinishedPotions};
+        for (int groupIndex = 0; groupIndex < potionGroups.length; groupIndex++)
+        {
+            EnumComposition potionGroup = potionGroups[groupIndex];
+            boolean unfinished = groupIndex == 1;
+            for (int potionEnumId : potionGroup.getIntVals())
+            {
+                EnumComposition potion = client.getEnum(potionEnumId);
+                client.runScript(ScriptID.POTIONSTORE_DOSES, potionEnumId);
+                int doses = client.getIntStack()[0];
+                client.runScript(ScriptID.POTIONSTORE_WITHDRAW_DOSES, potionEnumId);
+                int withdrawDoses = client.getIntStack()[0];
+                if (doses <= 0 || withdrawDoses <= 0)
+                {
+                    continue;
+                }
+
+                int withdrawItemId = potion.getIntValue(withdrawDoses);
+                int fourDoseItemId = potion.getIntValue(4);
+                int itemId = fourDoseItemId > 0 ? fourDoseItemId : withdrawItemId;
+                potions.add(buildPotionStorageRow(
+                    potionEnumId,
+                    itemId,
+                    safeItemName(itemId),
+                    doses,
+                    withdrawDoses,
+                    withdrawItemId,
+                    unfinished
+                ));
+                totalDoses += doses;
+            }
+        }
+
+        Map<String, Object> payload = basePayload(reason);
+        payload.put("kind", "potion_storage");
+        payload.put("potion_count", potions.size());
+        payload.put("total_doses", totalDoses);
+        payload.put("vial_count", client.getVarpValue(VarPlayerID.POTIONSTORE_VIALS));
+        payload.put("potions", potions);
+        debug("potion_storage", "Prepared Potion Storage export reason={} potionCount={} totalDoses={}",
+            reason, potions.size(), totalDoses);
+        updateDatasetStatus("potion_storage", "prepared", "ready_to_write", ImmutableMap.of(
+            "reason", reason,
+            "potion_count", potions.size(),
+            "total_doses", totalDoses
+        ));
+        writeJson("potion_storage", POTION_STORAGE_FILE, payload);
+    }
+
+    static Map<String, Object> buildPotionStorageRow(
+        int potionEnumId,
+        int itemId,
+        String name,
+        int doses,
+        int withdrawDoses,
+        int withdrawItemId,
+        boolean unfinished)
+    {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("potion_enum_id", potionEnumId);
+        row.put("id", itemId);
+        row.put("name", name);
+        row.put("doses", doses);
+        row.put("withdraw_doses", withdrawDoses);
+        row.put("withdraw_item_id", withdrawItemId);
+        row.put("unfinished", unfinished);
+        return row;
+    }
+
     private Map<String, Object> buildStats()
     {
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -2100,6 +2274,7 @@ public class CharacterStateExporterPlugin extends Plugin
             {
                 exportContainerSnapshot(containerKind, "manual_panel", 0L);
             }
+            exportPotionStorageSnapshot("manual_panel");
             exportQuestSnapshot("manual_panel");
             exportDiarySnapshot("manual_panel");
             exportCombatAchievementSnapshot("manual_panel");
@@ -2343,6 +2518,7 @@ public class CharacterStateExporterPlugin extends Plugin
         readinessSnapshot.put("local_player_present", player != null);
         readinessSnapshot.put("character_state_ready", isCharacterStateReady());
         readinessSnapshot.put("bank_container_present", client.getItemContainer(InventoryID.BANK) != null);
+        readinessSnapshot.put("potion_storage_available", potionStorageAvailable);
         readinessSnapshot.put("seed_vault_container_present", client.getItemContainer(InventoryID.SEED_VAULT) != null);
         readinessSnapshot.put("inventory_container_present", client.getItemContainer(InventoryID.INV) != null);
         readinessSnapshot.put("equipment_container_present", client.getItemContainer(InventoryID.WORN) != null);
