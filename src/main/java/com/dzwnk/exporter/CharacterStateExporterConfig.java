@@ -83,6 +83,16 @@ public interface CharacterStateExporterConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "exportPotionStorage",
+        name = "Export potion storage",
+        description = "Write potion storage snapshot when potion storage is opened or changed"
+    )
+    default boolean exportPotionStorage()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "exportSeedVault",
         name = "Export seed vault",
         description = "Write seed vault snapshot on seed-vault container changes"

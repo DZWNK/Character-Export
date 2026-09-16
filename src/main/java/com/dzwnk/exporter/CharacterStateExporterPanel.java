@@ -62,24 +62,25 @@ class CharacterStateExporterPanel extends PluginPanel
     private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MMM d, h:mm:ss a");
     private static final int BUTTON_WIDTH = 170;
     private static final String[] DATASET_FILES = {
-        "bank.json", "character.json", "diaries.json", "quests.json",
+        "bank.json", "potion_storage.json", "character.json", "diaries.json", "quests.json",
         "inventory.json", "equipment.json", "seed_vault.json", "combat_achievements.json", "collection_log.json"
     };
 
     static final String[] DATASET_KEYS = {
-        "bank", "character", "diaries", "quests",
+        "bank", "potion_storage", "character", "diaries", "quests",
         "inventory", "equipment", "seed_vault", "combat_achievements", "collection_log"
     };
     private static final String[] DATASET_LABELS = {
-        "Bank", "Stats", "Diaries", "Quests",
+        "Bank", "Potions", "Stats", "Diaries", "Quests",
         "Inventory", "Equipment", "Seed Vault", "Combat Tasks", "Collection Log"
     };
     private static final String[] DATASET_HINTS = {
-        "Log in", "Log in", "Log in", "Log in",
+        "Log in", "Log in", "Log in", "Log in", "Log in",
         "Log in", "Log in", "Log in", "Log in", "Log in"
     };
     private static final String[] DATASET_READY_HINTS = {
         "Open bank",
+        "Open potion storage",
         "Sync or train",
         "Sync or open diary",
         "Sync or quest",
@@ -284,7 +285,7 @@ class CharacterStateExporterPanel extends PluginPanel
             "<html>"
                 + "'Sync Available' exports Stats, Quests, Diaries, Tasks, "
                 + "Inventory &amp; Equipment.<br><br>"
-                + "Bank &amp; Seed Vault need to be opened in-game.<br><br>"
+                + "Bank, Potion Storage &amp; Seed Vault need to be opened in-game.<br><br>"
                 + "Collection Log needs to have each entry clicked in-game."
                 + "</html>"
         );
