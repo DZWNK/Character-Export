@@ -103,6 +103,16 @@ public interface CharacterStateExporterConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "exportGroupStorage",
+        name = "Export group storage",
+        description = "Write shared group storage when opened or changed on a Group Ironman account"
+    )
+    default boolean exportGroupStorage()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "exportEquipment",
         name = "Export equipment",
         description = "Write worn-equipment snapshot on equipment container changes"

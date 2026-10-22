@@ -63,20 +63,20 @@ class CharacterStateExporterPanel extends PluginPanel
     private static final int BUTTON_WIDTH = 170;
     private static final String[] DATASET_FILES = {
         "bank.json", "character.json", "diaries.json", "quests.json",
-        "inventory.json", "equipment.json", "seed_vault.json", "combat_achievements.json", "collection_log.json"
+        "inventory.json", "equipment.json", "seed_vault.json", "combat_achievements.json", "collection_log.json", "group_storage.json"
     };
 
     static final String[] DATASET_KEYS = {
         "bank", "character", "diaries", "quests",
-        "inventory", "equipment", "seed_vault", "combat_achievements", "collection_log"
+        "inventory", "equipment", "seed_vault", "combat_achievements", "collection_log", "group_storage"
     };
     private static final String[] DATASET_LABELS = {
         "Bank", "Stats", "Diaries", "Quests",
-        "Inventory", "Equipment", "Seed Vault", "Combat Tasks", "Collection Log"
+        "Inventory", "Equipment", "Seed Vault", "Combat Tasks", "Collection Log", "Group Storage"
     };
     private static final String[] DATASET_HINTS = {
         "Log in", "Log in", "Log in", "Log in",
-        "Log in", "Log in", "Log in", "Log in", "Log in"
+        "Log in", "Log in", "Log in", "Log in", "Log in", "Log in"
     };
     private static final String[] DATASET_READY_HINTS = {
         "Open bank",
@@ -87,7 +87,8 @@ class CharacterStateExporterPanel extends PluginPanel
         "Sync or change gear",
         "Open vault",
         "Sync or complete task",
-        "Open log"
+        "Open log",
+        "Open storage"
     };
 
     enum SyncOutcome

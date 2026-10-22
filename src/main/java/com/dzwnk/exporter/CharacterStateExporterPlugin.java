@@ -78,6 +78,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
@@ -1837,6 +1838,17 @@ public class CharacterStateExporterPlugin extends Plugin
             return;
         }
 
+        if (kind == ContainerKind.GROUP_STORAGE && !isGroupIronmanAccount())
+        {
+            updateDatasetStatus(kind.getDatasetKey(), "skipped", "not_group_ironman", ImmutableMap.of("reason", reason));
+            if (manualPanelRequest)
+            {
+                panel.markUnavailable(kind.getDatasetKey(), "Unavailable", "Group storage is only available to Group Ironman accounts.");
+            }
+            requestObservabilityWrite(false);
+            return;
+        }
+
         if (!acquireExportSlot(kind.getFileName(), minimumIntervalMs))
         {
             debug(kind.getDatasetKey(), "Throttled {} export reason={} minimumIntervalMs={}",
@@ -1902,6 +1914,13 @@ public class CharacterStateExporterPlugin extends Plugin
             "item_count", items.size()
         ));
         writeJson(kind.getDatasetKey(), kind.getFileName(), payload);
+    }
+
+    private boolean isGroupIronmanAccount()
+    {
+        int accountType = client.getVarbitValue(VarbitID.IRONMAN);
+        // 4 = group, 5 = hardcore group, 6 = unranked group Ironman.
+        return accountType == 4 || accountType == 5 || accountType == 6;
     }
 
     private Map<String, Object> buildStats()
@@ -2114,6 +2133,8 @@ public class CharacterStateExporterPlugin extends Plugin
                 return "Open your bank first to refresh this file.";
             case SEED_VAULT:
                 return "Open your seed vault first to refresh this file.";
+            case GROUP_STORAGE:
+                return "Open your group storage first to refresh this file.";
             case INVENTORY:
                 return "Inventory data is not available yet. Try again in a moment.";
             case EQUIPMENT:
@@ -2344,6 +2365,7 @@ public class CharacterStateExporterPlugin extends Plugin
         readinessSnapshot.put("character_state_ready", isCharacterStateReady());
         readinessSnapshot.put("bank_container_present", client.getItemContainer(InventoryID.BANK) != null);
         readinessSnapshot.put("seed_vault_container_present", client.getItemContainer(InventoryID.SEED_VAULT) != null);
+        readinessSnapshot.put("group_storage_container_present", client.getItemContainer(ContainerKind.GROUP_STORAGE.getInventoryId()) != null);
         readinessSnapshot.put("inventory_container_present", client.getItemContainer(InventoryID.INV) != null);
         readinessSnapshot.put("equipment_container_present", client.getItemContainer(InventoryID.WORN) != null);
         readinessSnapshot.put("world", client.getWorld());
@@ -2520,6 +2542,7 @@ public class CharacterStateExporterPlugin extends Plugin
     {
         BANK("bank", "bank.json", InventoryID.BANK, CONTAINER_EXPORT_INTERVAL_MS),
         SEED_VAULT("seed_vault", "seed_vault.json", InventoryID.SEED_VAULT, CONTAINER_EXPORT_INTERVAL_MS),
+        GROUP_STORAGE("group_storage", "group_storage.json", InventoryID.INV_GROUP_TEMP, CONTAINER_EXPORT_INTERVAL_MS),
         INVENTORY("inventory", "inventory.json", InventoryID.INV, INVENTORY_EXPORT_INTERVAL_MS),
         EQUIPMENT("equipment", "equipment.json", InventoryID.WORN, CONTAINER_EXPORT_INTERVAL_MS);
 
@@ -2564,6 +2587,8 @@ public class CharacterStateExporterPlugin extends Plugin
                     return config.exportBank();
                 case SEED_VAULT:
                     return config.exportSeedVault();
+                case GROUP_STORAGE:
+                    return config.exportGroupStorage();
                 case INVENTORY:
                     return config.exportInventory();
                 case EQUIPMENT:
@@ -2586,6 +2611,9 @@ public class CharacterStateExporterPlugin extends Plugin
                 case "inventory":
                 case "inv":
                     return INVENTORY;
+                case "groupstorage":
+                case "group_storage":
+                    return GROUP_STORAGE;
                 case "equipment":
                 case "gear":
                     return EQUIPMENT;

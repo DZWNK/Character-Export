@@ -13,6 +13,7 @@ A RuneLite plugin that writes your character's full state to local JSON files, f
 | `collection_log.json` | Collection log entry viewed | Incremental per-page accumulation, organised by tab |
 | `bank.json` | Bank opened | Full bank contents with item names |
 | `seed_vault.json` | Seed vault opened | Full seed vault contents |
+| `group_storage.json` | Group storage opened or changed | Shared storage contents for Group Ironman accounts (including hardcore) |
 | `inventory.json` | Inventory changed | Carried items |
 | `equipment.json` | Equipment changed | Worn items |
 

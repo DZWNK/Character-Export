@@ -12,6 +12,56 @@ import org.junit.Test;
 public class CharacterExportRegressionTest
 {
     @Test
+    public void groupStorageIsOnlyReadForGroupIronmanAccounts() throws Exception
+    {
+        for (int accountType : new int[]{-1, 0, 1, 2, 3, 4, 5, 6, 7})
+        {
+            boolean groupIronman = accountType == 4 || accountType == 5 || accountType == 6;
+            CharacterStateExporterPlugin plugin = new CharacterStateExporterPlugin();
+            List<Integer> containersRead = new ArrayList<>();
+            net.runelite.api.Client client = (net.runelite.api.Client) java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{net.runelite.api.Client.class}, (proxy, method, args) ->
+                {
+                    switch (method.getName())
+                    {
+                        case "getGameState":
+                            return net.runelite.api.GameState.LOGGED_IN;
+                        case "getVarbitValue":
+                            Assert.assertEquals(net.runelite.api.gameval.VarbitID.IRONMAN, args[0]);
+                            return accountType;
+                        case "getItemContainer":
+                            containersRead.add((Integer) args[0]);
+                            return null;
+                        default:
+                            throw new AssertionError("Unexpected client call: " + method.getName());
+                    }
+                });
+            java.lang.reflect.Field clientField = CharacterStateExporterPlugin.class.getDeclaredField("client");
+            clientField.setAccessible(true);
+            clientField.set(plugin, client);
+            java.lang.reflect.Field configField = CharacterStateExporterPlugin.class.getDeclaredField("config");
+            configField.setAccessible(true);
+            configField.set(plugin, new CharacterStateExporterConfig() {});
+
+            Class<?> kindClass = Class.forName(CharacterStateExporterPlugin.class.getName() + "$ContainerKind");
+            java.lang.reflect.Method fromCommand = kindClass.getDeclaredMethod("fromCommand", String.class);
+            fromCommand.setAccessible(true);
+            Object kind = fromCommand.invoke(null, "group_storage");
+            Assert.assertSame(kind, fromCommand.invoke(null, "groupstorage"));
+            java.lang.reflect.Method export = CharacterStateExporterPlugin.class.getDeclaredMethod(
+                "exportContainerSnapshot", kindClass, String.class, long.class);
+            export.setAccessible(true);
+            export.invoke(plugin, kind, "test", 0L);
+
+            Assert.assertEquals("Account type " + accountType, groupIronman ? 1 : 0, containersRead.size());
+            if (groupIronman)
+            {
+                Assert.assertEquals(Integer.valueOf(net.runelite.api.gameval.InventoryID.INV_GROUP_TEMP), containersRead.get(0));
+            }
+        }
+    }
+
+    @Test
     public void combatAchievementCompletionUsesInternalTaskIdRatherThanSortPosition()
     {
         // Barrows Novice is second in the tier-sorted struct list, but its internal task ID is 24.
